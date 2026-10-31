@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Palabra al revés</title>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;background:#111;color:#eee;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom))}
+  .card{width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px}
+  h1{font-size:22px;text-align:center;margin:0 0 4px}
+  .paso{background:#1d1d1d;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px}
+  .paso h2{font-size:15px;margin:0;color:#aaa;font-weight:600}
+  .boton{font-size:17px;padding:14px;border:0;border-radius:10px;background:#c62828;color:#fff;cursor:pointer;text-align:center;display:block}
+  .boton.play{background:#2e7d32}
+  .boton:disabled,.boton.off{opacity:.35;pointer-events:none}
+  input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+  .ayuda{font-size:13px;color:#777;margin:0}
+  #estado{text-align:center;color:#aaa;font-size:14px;min-height:20px}
+  .reset{background:none;border:0;color:#888;font-size:14px;padding:8px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Palabra al revés</h1>
+
+  <div class="paso">
+    <h2>1. Jugador A: graba la palabra</h2>
+    <label class="boton" id="lblA">🎙 Elegir grabación de A</label>
+    <input type="file" id="fileA" accept="audio/*">
+    <p class="ayuda">Graba con la app Notas de voz y elige el audio.</p>
+  </div>
+
+  <div class="paso">
+    <h2>2. Jugador B: escucha la palabra al revés</h2>
+    <button class="boton play" id="playA" disabled>🔊 Escuchar al revés</button>
+  </div>
+
+  <div class="paso">
+    <h2>3. Jugador B: graba lo que has oído</h2>
+    <label class="boton off" id="lblB">🎙 Elegir grabación de B</label>
+    <input type="file" id="fileB" accept="audio/*">
+  </div>
+
+  <div class="paso">
+    <h2>4. ¿Lo has clavado? Escúchalo al revés</h2>
+    <button class="boton play" id="playB" disabled>🔁 Escuchar mi intento al revés</button>
+  </div>
+
+  <div id="estado"></div>
+  <button class="reset" id="reset">Nueva ronda</button>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let ctx = null;
+let revA = null;
+let revB = null;
+
+function getCtx() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+
+// Copia del audio con las muestras al revés
+function invertir(buf) {
+  const out = getCtx().createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate);
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const src = buf.getChannelData(ch);
+    const dst = out.getChannelData(ch);
+    for (let i = 0; i < src.length; i++) dst[i] = src[src.length - 1 - i];
+  }
+  return out;
+}
+
+function reproducir(buf) {
+  const s = getCtx().createBufferSource();
+  s.buffer = buf;
+  s.connect(getCtx().destination);
+  s.start();
+}
+
+async function cargar(file) {
+  getCtx();
+  const data = await file.arrayBuffer();
+  return getCtx().decodeAudioData(data);
+}
+
+$('fileA').onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $('estado').textContent = 'Cargando...';
+  try {
+    revA = invertir(await cargar(file));
+    $('playA').disabled = false;
+    $('lblB').classList.remove('off');
+    $('estado').textContent = 'Palabra lista. Pásale el móvil a B.';
+  } catch (err) {
+    $('estado').textContent = 'No he podido leer ese audio. Prueba con otra grabación.';
+  }
+};
+
+$('playA').onclick = () => reproducir(revA);
+
+$('fileB').onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $('estado').textContent = 'Cargando...';
+  try {
+    revB = invertir(await cargar(file));
+    $('playB').disabled = false;
+    $('estado').textContent = 'Pulsa "Escuchar mi intento al revés" para comprobarlo.';
+  } catch (err) {
+    $('estado').textContent = 'No he podido leer ese audio. Prueba con otra grabación.';
+  }
+};
+
+$('playB').onclick = () => reproducir(revB);
+
+$('reset').onclick = () => location.reload();
+</script>
+</body>
+</html>
